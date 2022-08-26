@@ -1,6 +1,4 @@
 '''Train CIFAR10 with PyTorch.'''
-from curses import termattrs
-from mimetypes import init
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -19,7 +17,6 @@ from ban_loss import BANLoss
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
-parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--teacher', default=None, type=str, help='ban_teacher_path')
 parser.add_argument('--save_path', type=str, help='save_path')
 parser.add_argument('--ban_start_num', default=0, type=int)
@@ -31,14 +28,20 @@ args = parser.parse_args()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 if device == 'cuda':
     cudnn.benchmark = True
-    
-class VGGHelper(VGG):
-    def __init__(self):
-        super().__init__("VGG19")
-Model = VGGHelper
+
+def get_model():
+    if args.save_path == "resnet18":
+        return ResNet18()
+    elif args.save_path == "vgg19":
+        return VGG("VGG19")
+    else:
+        return None
+
 
 class Trainer:
-    def __init__(self, net, trainloader, testloader, criterion, optimizer, scheduler, epoch_num, save_interval, save_path, device, save_name=None) -> None:
+    def __init__(self, net, trainloader, testloader, criterion, optimizer, 
+                 scheduler, epoch_num, save_interval, save_path, device, 
+                 save_best, save_name=None) -> None:
         self.net = net
         self.trainloader = trainloader
         self.testloader = testloader
@@ -51,6 +54,7 @@ class Trainer:
         self.best_acc = -1
         self.epoch_num = epoch_num
         self.save_interval = save_interval if save_interval <= epoch_num else 1
+        self.save_best = save_best
         
     def train(self, epoch):
         print('\nEpoch: %d' % epoch)
@@ -102,7 +106,7 @@ class Trainer:
             if not os.path.exists("results/{}".format(self.save_path)):
                 os.mkdir("results/{}".format(self.save_path))
             
-            if acc > self.best_acc:
+            if acc > self.best_acc and self.save_best:
                 # 保存最好的
                 print("Better Acc {}, saving ...".format(acc))
                 state = {
@@ -156,7 +160,7 @@ def single_train():
     # Model
     print('==> Building model..')
 
-    net = Model()
+    net = get_model()
     net = net.to(device)
 
     # Trainer
@@ -164,8 +168,8 @@ def single_train():
 
     if args.teacher is not None:
         print("==> teacher: {}, start ban...".format(args.teacher))
-        teacher_net = Model()
-        teacher_net.load_state_dict(torch.load(args.teacher)["net"])
+        teacher_net = get_model()
+        teacher_net.load_state_dict(torch.load(args.teacher)["net"], False)
         teacher_net.to(device)
         criterion = BANLoss(criterion, teacher_net)
     else:
@@ -184,7 +188,8 @@ def single_train():
         epoch_num=args.epoch_num, 
         save_interval=args.save_interval,
         save_path=args.save_path,
-        device=device
+        device=device,
+        save_best=True
     )
 
     start_epoch = 0
@@ -201,11 +206,7 @@ def ban_repeat(start, end, init_net):
         ban_idx = ban_idx + 1
         
         teacher_net = net
-        print(id(teacher_net))
-        Model = ResNet18
-        net = Model().to(device)
-        print(id(net))
-        print(id(teacher_net))
+        net = get_model().to(device)
 
         teacher_net.to(device)
         criterion = BANLoss(nn.CrossEntropyLoss(), teacher_net)
@@ -223,7 +224,8 @@ def ban_repeat(start, end, init_net):
             save_interval=args.save_interval,
             save_path=args.save_path,
             device=device,
-            save_name="ban{}".format(ban_idx)
+            save_name="ban{}".format(ban_idx),
+            save_best=True
         )
         
         start_epoch = 0
@@ -236,7 +238,7 @@ if __name__ == "__main__":
     if args.teacher is None:
         single_train()
     else:
-        teacher_net = Model()
-        teacher_net.load_state_dict(torch.load(args.teacher)["net"])
+        teacher_net = get_model()
+        teacher_net.load_state_dict(torch.load(args.teacher)["net"], False)
         teacher_net.to(device)
         ban_repeat(args.ban_start_num, args.ban_num, teacher_net)
