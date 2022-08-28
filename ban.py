@@ -1,9 +1,10 @@
 '''Train CIFAR10 with PyTorch.'''
+import numpy as np
+import random
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
 
 import torchvision
 import torchvision.transforms as transforms
@@ -23,17 +24,34 @@ parser.add_argument('--ban_start_num', default=0, type=int)
 parser.add_argument('--ban_num', default=5, type=int)
 parser.add_argument('--epoch_num', default=200, type=int)
 parser.add_argument('--save_interval', default=50, type=int)
+parser.add_argument('--seed', default=42, type=int)
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-if device == 'cuda':
-    cudnn.benchmark = True
 
+if device == 'cuda':
+    torch.backends.cudnn.benchmark = True
+    
+if args.seed is not None:
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    
+    
+if not os.path.exists("results"):
+    os.mkdir("results")
+    
 def get_model():
     if args.save_path == "resnet18":
         return ResNet18()
     elif args.save_path == "vgg19":
         return VGG("VGG19")
+    elif args.save_path == "vgg11":
+        return VGG("VGG11")
+    elif args.save_path == "lenet":
+        return LeNet()
     else:
         return None
 
@@ -41,7 +59,7 @@ def get_model():
 class Trainer:
     def __init__(self, net, trainloader, testloader, criterion, optimizer, 
                  scheduler, epoch_num, save_interval, save_path, device, 
-                 save_best, save_name=None) -> None:
+                 save_best, save_name=None, save_acc=True) -> None:
         self.net = net
         self.trainloader = trainloader
         self.testloader = testloader
@@ -55,7 +73,14 @@ class Trainer:
         self.epoch_num = epoch_num
         self.save_interval = save_interval if save_interval <= epoch_num else 1
         self.save_best = save_best
+        self.save_acc = save_acc
         
+        if not os.path.exists("./results/{}".format(save_path)):
+            os.mkdir("./results/{}".format(save_path))
+        if self.save_acc:
+            f = open("results/{}/{}_acc_loss.log".format(self.save_path, self.name), "w")
+            f.close()
+
     def train(self, epoch):
         print('\nEpoch: %d' % epoch)
         self.net.train()
@@ -100,9 +125,12 @@ class Trainer:
 
         # Save checkpoint.
         acc = 100.*correct/total
+        
+        if self.save_acc:
+            with open("results/{}/{}_acc_loss.log".format(self.save_path, self.name), "a+") as f:
+                f.write("epoch:{} test_acc:{:4f} test_loss:{:.6f}\n".format(epoch+1, acc, test_loss))
+        
         if self.save_path is not None:
-            if not os.path.exists("results"):
-                os.mkdir("results")
             if not os.path.exists("results/{}".format(self.save_path)):
                 os.mkdir("results/{}".format(self.save_path))
             
