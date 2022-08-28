@@ -1,3 +1,6 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
 import numpy as np
 import torch
 import torchvision
@@ -18,10 +21,7 @@ classes = {
 
 
 def _acc(model, data_loader):
-    is_init_training = model.training
-    # print(is_init_training)
-    if is_init_training:
-        model.eval()
+    model.eval()
     model = model.to(device)
     error = 0
     total = 0
@@ -33,15 +33,11 @@ def _acc(model, data_loader):
         diff = y - torch.argmax(pred, axis=-1)
         error += diff.count_nonzero().item()
         total += y.numel()
-    if is_init_training:
-        model.train()
     return 1 - (error / total)
 
 
 def _ece(model, data_loader, num_bins=10):
-    is_init_training = model.training
-    if is_init_training:
-        model.eval()
+    model.eval()
     model = model.to(device)
     true_labels = []
     pred_labels = []
@@ -54,53 +50,26 @@ def _ece(model, data_loader, num_bins=10):
             pred = model(X)
         pred_labels.append(torch.argmax(pred, axis=-1))
         confidences.append(pred)
-    true_labels = torch.cat(true_labels).cpu()
-    pred_labels = torch.cat(pred_labels).cpu()
+    true_labels = torch.cat(true_labels).cpu().detach().numpy()
+    pred_labels = torch.cat(pred_labels).cpu().detach().numpy()
     confidences = torch.cat(confidences).cpu()
     # resnet输出没有softmax层，因此需要经过softmax处理
-    confidences = torch.nn.functional.softmax(confidences, dim=-1)
-    if is_init_training:
-        model.train()
-    return __compute_calibration(true_labels.detach().numpy(), pred_labels.detach().numpy(), confidences.detach().numpy(), num_bins)
+    confidences = torch.nn.functional.softmax(confidences, dim=-1).detach().numpy()
+    confidences = np.max(confidences, axis=-1)
+    return __compute_calibration(true_labels, pred_labels, confidences, num_bins)
 
 
 def __compute_calibration(true_labels, pred_labels, confidences, num_bins=10):
-    """Collects predictions into bins used to draw a reliability diagram.
-
-    Arguments:
-        true_labels: the true labels for the test examples
-        pred_labels: the predicted labels for the test examples
-        confidences: the predicted confidences for the test examples
-        num_bins: number of bins
-
-    The true_labels, pred_labels, confidences arguments must be NumPy arrays;
-    pred_labels and true_labels may contain numeric or string labels.
-
-    For a multi-class model, the predicted label and confidence should be those
-    of the highest scoring class.
-
-    Returns a dictionary containing the following NumPy arrays:
-        accuracies: the average accuracy for each bin
-        confidences: the average confidence for each bin
-        counts: the number of examples in each bin
-        bins: the confidence thresholds for each bin
-        avg_accuracy: the accuracy over the entire test set
-        avg_confidence: the average confidence over the entire test set
-        expected_calibration_error: a weighted average of all calibration gaps
-        max_calibration_error: the largest calibration gap across all bins
-    """
     assert(len(confidences) == len(pred_labels))
     assert(len(confidences) == len(true_labels))
     assert(num_bins > 0)
 
-    bin_size = 1.0 / num_bins
     bins = np.linspace(0.0, 1.0, num_bins + 1)
     indices = np.digitize(confidences, bins, right=True)
 
     bin_accuracies = np.zeros(num_bins, dtype=np.float)
     bin_confidences = np.zeros(num_bins, dtype=np.float)
     bin_counts = np.zeros(num_bins, dtype=np.int)
-
     for b in range(num_bins):
         selected = np.where(indices == b + 1)[0]
         if len(selected) > 0:
@@ -113,12 +82,8 @@ def __compute_calibration(true_labels, pred_labels, confidences, num_bins=10):
 
 
 def _nfr(model1, model2, data_loader):
-    is_init_training_1 = model1.training
-    is_init_training_2 = model2.training
-    if is_init_training_1:
-        model1.eval()
-    if is_init_training_2:
-        model2.eval()
+    model1.eval()
+    model2.eval()
     model1 = model1.to(device)
     model2 = model2.to(device)
     vals = []
@@ -133,11 +98,6 @@ def _nfr(model1, model2, data_loader):
         pred_h2 = torch.argmax(pred2, axis=-1)
         vals.append(__nfr_compute(pred_h1, pred_h2, y).item())
         total += y.numel()
-    # print(type(vals), type(total))
-    if is_init_training_1:
-        model1.train()
-    if is_init_training_2:
-        model2.train()
     return 100. * sum(vals) / total
 
 
@@ -146,15 +106,13 @@ def __nfr_compute(pred_h1: torch.Tensor, pred_h2: torch.Tensor, truth: torch.Ten
     wrong_h2 = ~pred_h2.eq(truth)
     negative_flip = wrong_h2.masked_select(correct_h1)
     val = negative_flip.count_nonzero()
-    return val
+    return val                          
     # val = negative_flip.count_nonzero() / truth.size(0)
     # return 100. * val.item()
 
 
 def _robustness(model: torch.nn.Module, dataset: torch.utils.data.Dataset, num_classes):
-    is_init_training = model.training
-    if is_init_training:
-        model.eval()
+    model.eval()
     single_sample = dataset[0][0]
     input_shape = single_sample.size
     # num_classes = num_classes
@@ -173,8 +131,6 @@ def _robustness(model: torch.nn.Module, dataset: torch.utils.data.Dataset, num_c
         if i % 500 == 0:
             print(i, 'images rb tested:', score)
         scores.append(score)
-    if is_init_training:
-        model.train()
     return sum(scores) / len(scores)
 
 

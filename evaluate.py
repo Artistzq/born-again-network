@@ -1,8 +1,12 @@
 import argparse
+
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
 import torch
 from metrics import Metric
 from models import *
-import os
+
 
 parser = argparse.ArgumentParser(description='Bans Evaluating')
 parser.add_argument('--dataset', default="CIFAR10", type=str)
