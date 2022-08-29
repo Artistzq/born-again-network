@@ -6,6 +6,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import torch
 from metrics import Metric
 from models import *
+from utils import get_model
 
 
 parser = argparse.ArgumentParser(description='Bans Evaluating')
@@ -16,19 +17,10 @@ args = parser.parse_args()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 evaluate_path = args.path
 metric = Metric(args.dataset)
+model_type = evaluate_path.split("_")[0]
 
-if evaluate_path == "resnet18":
-    net = ResNet18()
-    origin = ResNet18()
-elif evaluate_path == "vgg19":
-    net = VGG("VGG19")
-    origin = VGG("VGG19")
-elif evaluate_path == "vgg11":
-    net = VGG("VGG11")
-    origin = VGG("VGG11")
-elif evaluate_path == "lenet":
-    net = LeNet()
-    origin = LeNet()
+net = get_model(model_type)
+origin = get_model(model_type)
 
 model_names = os.listdir("./results/{}".format(evaluate_path))
 model_names = [item for item in model_names if "ep" in item]

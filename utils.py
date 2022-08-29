@@ -6,11 +6,30 @@
 import os
 import sys
 import time
-import math
 
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+
+from models import *
+
+def get_model(model_type):
+    if model_type == "resnet18":
+        return ResNet18()
+    elif model_type == "vgg19":
+        return VGG("VGG19")
+    elif model_type == "vgg11":
+        return VGG("VGG11")
+    elif model_type == "lenet":
+        return LeNet()
+    elif model_type == "mobilenet":
+        return MobileNet()
+    elif model_type == "mobilenetv2":
+        return MobileNetV2()
+    elif model_type == "simpledla":
+        return SimpleDLA()
+    else:
+        return None
 
 
 def get_mean_and_std(dataset):

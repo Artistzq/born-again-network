@@ -14,6 +14,7 @@ import argparse
 
 from models import *
 from utils import progress_bar
+from utils import get_model as get_model_from_path
 from ban_loss import BANLoss
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
@@ -26,6 +27,9 @@ parser.add_argument('--epoch_num', default=200, type=int)
 parser.add_argument('--save_interval', default=50, type=int)
 parser.add_argument('--seed', default=42, type=int)
 args = parser.parse_args()
+
+def get_model():
+    return get_model_from_path(args.save_path)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -42,19 +46,6 @@ if args.seed is not None:
     
 if not os.path.exists("results"):
     os.mkdir("results")
-    
-def get_model():
-    if args.save_path == "resnet18":
-        return ResNet18()
-    elif args.save_path == "vgg19":
-        return VGG("VGG19")
-    elif args.save_path == "vgg11":
-        return VGG("VGG11")
-    elif args.save_path == "lenet":
-        return LeNet()
-    else:
-        return None
-
 
 class Trainer:
     def __init__(self, net, trainloader, testloader, criterion, optimizer, 
