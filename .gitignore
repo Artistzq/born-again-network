@@ -6,7 +6,7 @@ __pycache__/
 *.ipynb
 data/
 checkpoint/
-results/
+results*/
 
 ### macOS ###
 # General
