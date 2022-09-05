@@ -2,6 +2,9 @@
 import numpy as np
 import random
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,13 +12,13 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 
-import os
 import argparse
 
 from models import *
 from utils import progress_bar
 from utils import get_model as get_model_from_path
 from ban_loss import BANLoss
+
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
@@ -29,7 +32,7 @@ parser.add_argument('--seed', default=42, type=int)
 args = parser.parse_args()
 
 def get_model():
-    return get_model_from_path(args.save_path)
+    return get_model_from_path(args.save_path.split("_")[0])
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -95,6 +98,10 @@ class Trainer:
             progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                         % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
+        if self.save_acc:
+            with open("results/{}/{}_acc_loss.log".format(self.save_path, self.name), "a+") as f:
+                f.write("epoch:{} train_acc:{:4f} train_loss:{:.6f} ".format(epoch+1, 100.*correct/total, train_loss))
+    
     def test(self, epoch):
         self.net.eval()
         test_loss = 0
@@ -119,7 +126,7 @@ class Trainer:
         
         if self.save_acc:
             with open("results/{}/{}_acc_loss.log".format(self.save_path, self.name), "a+") as f:
-                f.write("epoch:{} test_acc:{:4f} test_loss:{:.6f}\n".format(epoch+1, acc, test_loss))
+                f.write("test_acc:{:4f} test_loss:{:.6f}\n".format(epoch+1, acc, test_loss))
         
         if self.save_path is not None:
             if not os.path.exists("results/{}".format(self.save_path)):
@@ -146,6 +153,20 @@ class Trainer:
                 }
                 torch.save(state, 'results/{}/{}_ep{}.pth'.format(self.save_path, self.name, epoch+1))
 
+dataset = "CIFAR100"
+
+dataset_options = {
+    "CIFAR10": {
+        "API": torchvision.datasets.CIFAR10,
+        "MEAN": (0.4914, 0.4822, 0.4465),
+        "STD": (0.2023, 0.1994, 0.2010)
+    }, 
+    "CIFAR100": {
+        "API": torchvision.datasets.CIFAR100,
+        "MEAN": (0.5070751592371323, 0.48654887331495095, 0.4409178433670343),
+        "STD": (0.2673342858792401, 0.2564384629170883, 0.27615047132568404)
+    }
+}
 
 # Data
 print('==> Preparing data..')
@@ -153,23 +174,23 @@ transform_train = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    transforms.Normalize(dataset_options[dataset]["MEAN"], dataset_options[dataset]["STD"]),
 ])
 
 transform_test = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    transforms.Normalize(dataset_options[dataset]["MEAN"], dataset_options[dataset]["STD"]),
 ])
 
-trainset = torchvision.datasets.CIFAR10(
+trainset = dataset_options[dataset]["API"](
     root='./data', train=True, download=True, transform=transform_train)
 trainloader = torch.utils.data.DataLoader(
-    trainset, batch_size=128, shuffle=True, num_workers=2)
+    trainset, batch_size=64, shuffle=True)
 
-testset = torchvision.datasets.CIFAR10(
+testset = dataset_options[dataset]["API"](
     root='./data', train=False, download=True, transform=transform_test)
 testloader = torch.utils.data.DataLoader(
-    testset, batch_size=100, shuffle=False, num_workers=2)
+    testset, batch_size=64, shuffle=False)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer',
            'dog', 'frog', 'horse', 'ship', 'truck')
@@ -208,7 +229,7 @@ def single_train():
         save_interval=args.save_interval,
         save_path=args.save_path,
         device=device,
-        save_best=True
+        save_best=False
     )
 
     start_epoch = 0
@@ -244,7 +265,7 @@ def ban_repeat(start, end, init_net):
             save_path=args.save_path,
             device=device,
             save_name="ban{}".format(ban_idx),
-            save_best=True
+            save_best=False
         )
         
         start_epoch = 0

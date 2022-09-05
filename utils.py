@@ -16,10 +16,10 @@ from models import *
 def get_model(model_type):
     if model_type == "resnet18":
         return ResNet18()
-    elif model_type == "vgg19":
-        return VGG("VGG19")
-    elif model_type == "vgg11":
-        return VGG("VGG11")
+    elif model_type == "resnet34":
+        return ResNet34()
+    elif "vgg" in model_type:
+        return VGG(model_type.upper())
     elif model_type == "lenet":
         return LeNet()
     elif model_type == "mobilenet":
